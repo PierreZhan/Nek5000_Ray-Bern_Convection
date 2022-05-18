@@ -1,0 +1,333 @@
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      if (ifield.eq.1) then
+         utrans  = param(1)
+         udiff   = param(2)
+
+      else
+
+         utrans  = param(7)        ! thermal properties
+         udiff   = param(8)
+
+         if (ieg .gt. nelgv) then  ! properties in the solid
+            udiff   = 0.1*param(8) ! conductivity
+            utrans  = 1.0
+         endif
+
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf  (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ffx = 0.0
+      ffy = temp
+      ffz = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq  (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      qvol = 0.0
+      if (ieg.gt.nelgv) qvol = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+      
+      real var1(nx1*ny1*nz1*nelv)
+      
+
+      real DTDX(lx1,ly1,lz1,lelt,ldimt)
+      real DTDY(lx1,ly1,lz1,lelt,ldimt)
+      real DTDZ(lx1,ly1,lz1,lelt,ldimt)
+      
+      integer i
+      integer e,f
+      
+      real s_bar
+      
+      !output for Step 0 to 100 and then every 100 Steps:
+      nio = -1
+      if (istep.le.100.or.mod(istep,100).eq.99) nio=nid
+      
+      nv = nx1*ny1*nz1*nelv
+      nt = nx1*ny1*nz1*nelt
+      
+      nxyz=lx1*ly1*lz1
+      
+
+
+
+
+
+      if (mod(istep,100).eq.0) then
+         tmax = glmax(t ,nt)
+         umax = glmax(vx,nt)
+         if (nid.eq.0) write(6,1) istep,time,umax,tmax
+   1     format(i10,1p3e12.5,' time,umax,tmax')
+      endif
+
+
+
+c     global scalar
+c     real function glsc3(a,b,mult,n) source
+c     Input: integer n, real array a of size n, real array b of size n, real array mult of size n 
+c     Returns the sum of a(i)*b(i)*mult(i), i=1..n among all processes 
+c     /mass/ real array bm1 of size (lx1,ly1,lz1,lelt)
+
+
+c     Value of the mass of the cell (rho=1)
+      var_mass = 0.5
+
+
+c     Compute total kinetic energy
+      if(mod(istep,100).eq.0)then
+         xke = glsc3(vx, vx, bm1, nv)
+         yke = glsc3(vy, vy, bm1, nv)
+         zke = glsc3(vz, vz, bm1, nv)
+         total_ke = 0.5*(xke + yke + zke)/(param(8)**2*var_mass)
+	 if(istep.ge.1000000.and.nid.eq.0) write(6,11) "Step ", istep 
+         if(nid.eq.0) write(6,2) istep, time, total_ke
+   2    format(i10,1p2e14.6,'  Ekin')
+  11    format(a10,i10)
+      endif
+            
+		
+
+c     Compute Nusselt number Volume averaged with different cellsizes
+c     param(8) is conductivity
+      if(mod(istep,100).eq.0)then
+      	vol_nu1 = glsc3(vy,t,bm1,nv)
+         vol_nu = 1.0+1.0/param(8)*vol_nu1/var_mass
+         if(nid.eq.0) write(6,33) istep, time, vol_nu
+   33    format(i10,1p2e14.6,'  Nusselt')
+      endif 
+      
+      
+      
+c	  Nusselt number gradient at bottom wall:
+      if(mod(istep,100).eq.0)then
+      	call gradm1(DTDX,DTDY,DTDZ,T)
+		call surf_avg(s_bar,a_surf, DTDY,2,'t  ')
+		!Nus_wall is negative > abs
+		if(nid.eq.0) write(6,36) istep, time, abs(s_bar)
+   36    format(i10,1p2e14.6,'  Nuswall')
+      endif 
+      
+      
+      
+c     Compute Peclet Number
+      if(mod(istep,100).eq.0)then
+      	v1 = glsc3(vx,vx, bm1, nv)
+      	v2 = glsc3(vy,vy, bm1, nv)
+      	v3 = (v1+v2)/var_mass
+      	!v4 = fmdian(v3, nv, .TRUE.)
+      	peclet = (v3)**0.5/param(8)
+         if(nid.eq.0) write(6,5) istep, time, peclet
+   5    format(i10,1p2e14.6,'  Peclet')
+      endif
+      
+      
+
+
+
+			
+
+
+
+
+
+c	output info u_x_max, u_y_max
+      if(istep.eq.0)then
+      	vmaxx=glmax(vx,nt)
+      	vmaxy=glmax(vy,nt)
+         if(nid.eq.0) write(6,40) istep, time, vmaxx
+         if(nid.eq.0) write(6,41) istep, time, vmaxy
+   40    format(i10,1p2e14.6,'  Vmaxx')
+   41    format(i10,1p2e14.6,'  Vmaxy')
+c	   if(nid.eq.0) then
+c		 	write(6,40) istep, time, vmaxx, 'vmaxx'
+c		 	write(6,40) istep, time, vmaxy, 'vmaxy'
+c		 end if
+c	   40    format(i6,1p2e14.6,a9)
+      endif 
+      
+
+c     info output at step=22222
+      if(istep.eq.111)then
+         summem = glsum(bm1,nv)
+         vmaxy=glmax(vy,nt)
+         vminy=glmin(vy,nt)
+         vmaxt=glmax(t,nt)
+         vmint=glmin(t,nt)
+         vmedv=fmdian(vy,nt,.TRUE.)
+         vmedt=fmdian(t,nt,.TRUE.)
+        if (nid.eq.0) write(6,*) summem
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userbc (ix,iy,iz,iside,ieg)
+c     NOTE ::: This subroutine MAY NOT be called by every process
+
+C     Set boundary conditions
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+
+      if(y==0) then 
+          temp=10.0
+      end if
+
+      if(y==1) then
+          temp=0.0
+      end if
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+
+C     Set initial conditions
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = RAND(I)*1e-5 
+      uy   = RAND(I)*1e-5 
+
+       
+      
+      temp = 1.0 - y
+
+      if(y==0) temp=100.0
+      if(y==1) temp=0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+c     param(66) = 4
+c     param(67) = 4
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+
+      subroutine surf_avg(s_bar,a_surf,s,ifld,cb3)
+
+
+      include 'SIZE'
+      include 'TOTAL'
+
+
+      real s(lx1,ly1,lz1,lelt)
+      character*3 cb3
+
+      integer e,f
+
+
+      s_bar  = 0
+      s_surf = 0
+      a_surf = 0
+      n_surf = 0
+
+
+      do e=1,nelt
+      f=1	!nur die untere Wand
+         if (cbc(f,e,ifld).eq.cb3) then
+            call facint1(s1,a1,s,area,f,e) ! integrate a() on face f
+            s_surf = s_surf + s1
+            a_surf = a_surf + a1
+            n_surf = n_surf + 1
+         endif
+      enddo
+
+
+      s_surf = glsum(s_surf,1)   ! sum across all processors
+      a_surf = glsum(a_surf,1)
+      n_surf = iglsum(n_surf,1)
+
+
+      if (a_surf.gt.0) s_bar  = s_surf/a_surf
+
+
+c     if (nid.eq.0) write(6,2) istep,n_surf,time,a_surf,s_surf,s_bar
+c   2 format(2i9,1p4e12.4,' surf_avg')
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+
+      subroutine facint1(s1,a1,s,area,f,e) ! integrate a() on face f
+
+
+      include 'SIZE'
+      include 'TOPOL'
+
+
+      real s(lx1,ly1,lz1,lelv),area(lx1,lz1,6,lelv)
+      integer e,f
+
+
+      call dsset(nx1,ny1,nz1) !     Set up counters
+
+      iface  = eface1(f)
+
+      js1    = skpdat(1,iface)
+      jf1    = skpdat(2,iface)
+      jskip1 = skpdat(3,iface)
+      js2    = skpdat(4,iface)
+      jf2    = skpdat(5,iface)
+      jskip2 = skpdat(6,iface)
+
+
+      i =0
+      s1=0
+      a1=0
+
+      do 100 j2=js2,jf2,jskip2
+      do 100 j1=js1,jf1,jskip1
+         i  = i+1
+         s1 = s1 + area(i,1,f,e)*s(j1,j2,1,e)
+         a1 = a1 + area(i,1,f,e)
+
+  100 continue
+
+
+      return
+      end
+
+c-----------------------------------------------------------------------
