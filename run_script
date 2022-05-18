@@ -1,0 +1,20 @@
+#!/bin/bash
+
+
+#################################################################
+# Parameter einstellen:
+
+Ra=1e5	# Rayleigh-Zahl
+Nu=10	# zugehörige geschätzte nusseltzahl für die Geometrie
+Pr=1e3	# Prandtl-Zahl
+E_x=9	# Anzahl der Elemente in x-Richtung
+cores=2	# Anzahl der Prozesse
+
+#################################################################
+
+
+makenek clean
+make_boxfile $E_x $Nu
+par_change $Pr $Ra
+nice -n 19 gen_mesh_debug
+nice -n 19 com $cores

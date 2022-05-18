@@ -1,0 +1,21 @@
+Number of total Steps: 9000000
+
+Prandl:		1000.0
+Rayleigh:	1.00E+05
+Ekman:		0.00E+00
+lx1:		8	(polynomial order = 7)
+Aspect ratio:	0.00
+Nelx:		9
+Nely:		18
+Nelz:		0
+
+SYM,SYM,SYM,SYM,        V bc's
+I  ,I  ,t  ,t  ,        T bc's
+Ekin:		9.8127E+04
+Nusselt:	4.0776E+03
+Nuswall:	3.5293E-12
+Peclet:		4.4301E+02
+Anisotropy:	5.0000E-01
+act Step:	10400.0
+t:		0.0100
+elapsed time:	286.99 sec (=4.78 min)
